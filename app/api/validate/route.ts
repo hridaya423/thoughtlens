@@ -1,6 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
@@ -28,88 +26,32 @@ function extractJSON(text: string) {
   }
 }
 
-async function getMarketTrends(idea: string) {
+async function getCompleteAnalysis(idea: string, description: string) {
   try {
     const message = await anthropic.messages.create({
       model: "claude-3-opus-20240229",
-      max_tokens: 1024,
-      system: "You are a market research expert. You must respond with valid JSON only, no other text.",
+      max_tokens: 4096,
+      system: "You are a comprehensive business analyst. You must respond with valid JSON only, no other text.",
       messages: [{
         role: "user",
-        content: `Analyze the market trends for this idea and return a JSON object with exactly this structure:
+        content: `Analyze this business idea and return a JSON object with exactly this structure:
 {
-  "score": <number between 0-100>,
-  "trends": <array of strings with current relevant trends>,
-  "analysis": <string explaining the market trends analysis>
-}
-
-Idea to analyze: ${idea}
-
-Remember to return ONLY the JSON object, no other text.`
-      }]
-    })
-
-    const content = message.content[0].type === 'text' 
-    ? message.content[0].text
-    : '';
-    return extractJSON(content)
-  } catch (error) {
-    console.error('Error getting market trends:', error)
-    return {
-      score: 0,
-      trends: [],
-      analysis: 'Failed to analyze market trends'
-    }
-  }
-}
-
-async function analyzeCompetition(idea: string, description: string) {
-  try {
-    const message = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
-      max_tokens: 1024,
-      system: "You are a competitive analysis expert. You must respond with valid JSON only, no other text.",
-      messages: [{
-        role: "user",
-        content: `Analyze the competition for this idea and return a JSON object with exactly this structure:
-{
-  "score": <number between 0-100>,
-  "competitors": <array of strings with main competitors>,
-  "analysis": <string explaining the competitive landscape>
-}
-
-Idea: ${idea}
-Description: ${description}
-
-Remember to return ONLY the JSON object, no other text.`
-      }]
-    })
-    const content = message.content[0].type === 'text' 
-    ? message.content[0].text
-    : '';
-    return extractJSON(content)
-  } catch (error) {
-    console.error('Error analyzing competition:', error)
-    return {
-      score: 0,
-      competitors: [],
-      analysis: 'Failed to analyze competition'
-    }
-  }
-}
-
-async function analyzeSentiment(idea: string, description: string) {
-  try {
-    const message = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
-      max_tokens: 1024,
-      system: "You are a market sentiment analyst. You must respond with valid JSON only, no other text.",
-      messages: [{
-        role: "user",
-        content: `Analyze the market sentiment for this idea and return a JSON object with exactly this structure:
-{
-  "score": <number between 0-100>,
-  "analysis": <string explaining the market sentiment analysis>
+  "marketTrends": {
+    "score": <number between 0-100>,
+    "trends": <array of strings with current relevant trends>,
+    "analysis": <string explaining the market trends analysis>
+  },
+  "competition": {
+    "score": <number between 0-100>,
+    "competitors": <array of strings with main competitors>,
+    "analysis": <string explaining the competitive landscape>
+  },
+  "sentiment": {
+    "score": <number between 0-100>,
+    "analysis": <string explaining the market sentiment analysis>
+  },
+  "recommendations": <array of strings with strategic recommendations>,
+  "overallScore": <number between 0-100 representing the average of all scores>
 }
 
 Idea: ${idea}
@@ -120,88 +62,44 @@ Remember to return ONLY the JSON object, no other text.`
     })
 
     const content = message.content[0].type === 'text' 
-    ? message.content[0].text
-    : '';
-    return extractJSON(content) 
-  } catch (error) {
-    console.error('Error analyzing sentiment:', error)
-    return {
-      score: 0,
-      analysis: 'Failed to analyze market sentiment'
-    }
-  }
-}
-async function generateRecommendations(
-  idea: string,
-  description: string,
-  marketTrends: any,
-  competition: any,
-  sentiment: any
-) {
-  try {
-    const message = await anthropic.messages.create({
-      model: "claude-3-opus-20240229",
-      max_tokens: 1024,
-      system: "You are a business strategy expert. You must respond with valid JSON only, no other text.",
-      messages: [{
-        role: "user",
-        content: `Based on the analysis provided, generate recommendations and return them as a JSON array of strings.
-The response should be ONLY a JSON array like this: ["recommendation 1", "recommendation 2", ...]
-
-Idea: ${idea}
-Description: ${description}
-Market Trends Analysis: ${JSON.stringify(marketTrends)}
-Competition Analysis: ${JSON.stringify(competition)}
-Sentiment Analysis: ${JSON.stringify(sentiment)}
-
-Remember to return ONLY the JSON array, no other text.`
-      }]
-    })
-
-    const content = message.content[0].type === 'text' 
-    ? message.content[0].text
-    : '';
+      ? message.content[0].text
+      : '';
     return extractJSON(content)
   } catch (error) {
-    console.error('Error generating recommendations:', error)
-    return ['Failed to generate recommendations']
+    console.error('Error in complete analysis:', error)
+    return {
+      marketTrends: {
+        score: 0,
+        trends: [],
+        analysis: 'Failed to analyze market trends'
+      },
+      competition: {
+        score: 0,
+        competitors: [],
+        analysis: 'Failed to analyze competition'
+      },
+      sentiment: {
+        score: 0,
+        analysis: 'Failed to analyze market sentiment'
+      },
+      recommendations: ['Failed to generate recommendations'],
+      overallScore: 0
+    }
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    
     const { idea, description, category } = validateSchema.parse(body)
 
-    const marketTrends = await getMarketTrends(idea)
-
-    const competition = await analyzeCompetition(idea, description)
-
-    const sentiment = await analyzeSentiment(idea, description)
-
-    const overallScore = Math.round(
-      (marketTrends.score + competition.score + sentiment.score) / 3
-    )
-
-    const recommendations = await generateRecommendations(
-      idea,
-      description,
-      marketTrends,
-      competition,
-      sentiment
-    )
-    return NextResponse.json({
-      overallScore,
-      marketTrends,
-      competition,
-      sentiment,
-      recommendations
-    })
+    const analysis = await getCompleteAnalysis(idea, description)
+    
+    return NextResponse.json(analysis)
   } catch (error) {
-    console.error('Validation error:', error)
+    console.error('API error:', error)
     return NextResponse.json(
-      { error: 'Failed to validate idea' },
+      { error: 'Failed to analyze idea' },
       { status: 500 }
     )
   }
